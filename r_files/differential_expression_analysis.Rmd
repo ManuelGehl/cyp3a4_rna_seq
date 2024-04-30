@@ -1,0 +1,300 @@
+---
+title: "Differential Gene Expression Analysis"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r}
+# Import libraries
+library(tximeta)
+library(DESeq2)
+library(pheatmap)
+library(ggplot2)
+library(ggfortify)
+library(EnsDb.Hsapiens.v86)
+library(AnnotationDbi)
+library(EnhancedVolcano)
+```
+
+
+# Data processing
+
+
+```{r}
+# Read column data
+col_data = read.table(
+  "../data/sra_run_table.txt", 
+  stringsAsFactors=TRUE, 
+  sep=",", 
+  header=TRUE)
+
+# Rename run column
+col_data$names = col_data$Run
+
+# Add file paths to quant.sf files
+col_data$files = file.path(
+  "../results/salmon_output",
+  col_data$names, 
+  "quant.sf")
+
+# Add condition column
+col_data$condition = ifelse(grepl("Rifampin", col_data$treatment), "Rifampin", "DMSO")
+
+# Change condition to factor
+col_data$condition = factor(col_data$condition)
+```
+
+
+
+```{r}
+# Run tximeta to obtain metadata
+meta_data = tximeta(col_data)
+
+# Convert transcript to gene-level data
+gene_data = summarizeToGene(meta_data)
+
+# Relevel condition column
+gene_data$condition = relevel(gene_data$condition, ref = "DMSO")
+
+# Filter out rows with less than 10 counts in total
+print(nrow(gene_data))
+gene_data = gene_data[rowSums(assay(gene_data, "counts")) >= 10, ]
+print(nrow(gene_data))
+
+# Check
+gene_data
+
+# Create DESeq dataset
+deseq_dataset = DESeqDataSet(se=gene_data, design = ~ condition)
+
+# Check
+deseq_dataset
+```
+
+
+# Exploratory Data Analysis
+
+
+
+```{r}
+# Create variance-stabilized dataset for clustering
+vst_dataset = vst(deseq_dataset, blind=FALSE)
+
+# Calculate sample distances
+sample_dist = dist(t(assay(vst_dataset)))
+
+# Construct heatmap
+sample_dist_mat = as.matrix(sample_dist)
+rownames(sample_dist_mat) = vst_dataset$condition
+colnames(sample_dist_mat) = rownames(sample_dist_mat)
+
+pheatmap(
+  sample_dist_mat,
+  clustering_distance_rows = sample_dist,
+  clustering_distance_cols = sample_dist,
+  angle_col = 45,
+  main = "Distances between samples",
+)
+```
+
+```{r}
+# Select 500 genes with highest variance between samples
+gene_var = apply(assay(vst_dataset), 1, var)
+selected_genes = names(gene_var[order(gene_var, decreasing= TRUE)[1:500]])
+
+# Transpose matrix of most variant genes
+transposed_mat = t(assay(vst_dataset[selected_genes, ]))
+
+# Perform PCA on VST values
+pca_vst = prcomp(transposed_mat)
+# Plot PCA results
+autoplot(
+  pca_vst, 
+  data=col_data, 
+  colour="condition"
+  ) +
+  theme_minimal() +
+  ggtitle("PCA of 500 most variant genes") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Differential expression analysis
+
+
+```{r}
+# Perform DEA
+deseq_dataset = DESeq(deseq_dataset)
+```
+
+
+```{r}
+# Extract results
+dea_results = results(
+  deseq_dataset, 
+  contrast=c("condition", "Rifampin", "DMSO")
+  )
+
+# Get summary of results
+summary(dea_results)
+```
+
+
+
+```{r}
+par(mfrow = c(2, 2))
+# Create MA plot with shrinking
+results_shr = lfcShrink(deseq_dataset, coef="condition_Rifampin_vs_DMSO", type="apeglm")
+
+plotMA(
+  results_shr,
+  main = "MA plot",
+  xlab = "Mean of normalized counts",
+  ylab = "LFC",
+  ylim = c(-5, 5)
+  )
+
+# Check distribution of pvalues
+hist(
+  dea_results$pvalue[dea_results$baseMean > 10], 
+  xlab = "p-value", 
+  main = "Distribution of p-values"
+  )
+
+# Plot Relative Log Expression plot
+EDASeq::plotRLE(
+  counts(deseq_dataset), 
+  outline=FALSE, 
+  ylim=c(-4, 4), 
+  col=as.numeric(col_data$condition), 
+  main = 'Raw Counts'
+  )
+
+EDASeq::plotRLE(
+  counts(deseq_dataset, normalized = TRUE), 
+  outline=FALSE, ylim=c(-4, 4), 
+  col = as.numeric(col_data$condition), 
+  main = 'Normalized Counts'
+  )
+```
+
+
+```{r}
+# Extract ensemble-ids and write them as column
+ensembl_ids = substr(rownames(dea_results), 1,15)
+dea_results$ensemble_id = ensembl_ids
+
+# Map gene symbols and entrez-ids to results
+dea_results$symbol = mapIds(
+  EnsDb.Hsapiens.v86, 
+  keys = ensembl_ids,
+  column="SYMBOL",
+  keytype="GENEID",
+  multiVals="first")
+
+dea_results$entrez = mapIds(
+  EnsDb.Hsapiens.v86, 
+  keys = ensembl_ids,
+  keytype="GENEID",
+  column="ENTREZID",
+  multiVals="first")
+
+# Replace NA symbols with the respective ESG number
+dea_results$symbol = ifelse(is.na(dea_results$symbol), dea_results$ensemble_id, dea_results$symbol)
+
+# Save unfiltered results
+write.csv(as.data.frame(dea_results), "../results/differential_expression/dea_results.csv")
+
+# Check
+head(dea_results)
+```
+
+```{r}
+# Remove genes with NA adjusted p values
+print(dim(dea_results))
+dea_results_filtered = dea_results[!is.na(dea_results$padj), ]
+print(dim(dea_results_filtered))
+
+# Select genes with adjusted pvalues below 0.1
+dea_results_filtered = dea_results_filtered[dea_results_filtered$padj < 0.1, ]
+print(dim(dea_results_filtered))
+
+# Select genes with absolute log2 fold change above 1
+dea_results_filtered = dea_results_filtered[abs(dea_results_filtered$log2FoldChange) > 1, ]
+print(dim(dea_results_filtered))
+
+# Transform into dataframe
+dea_results_filtered = as.data.frame(dea_results_filtered)
+
+# Save filtered results
+write.csv(dea_results_filtered, "../results/differential_expression/dea_results_filtered.csv")
+
+head(dea_results_filtered)
+```
+
+
+
+
+```{r}
+# Construct pca based on selected genes
+selected_genes = rownames(dea_results_filtered)
+
+# Transpose matrix of most variant genes
+transposed_mat = t(assay(vst_dataset[selected_genes, ]))
+
+# Perform PCA on VST values
+pca_vst = prcomp(transposed_mat)
+
+# Plot PCA results
+autoplot(pca_vst, 
+         data=col_data, 
+         colour="condition") +
+         theme_minimal() +
+         ggtitle("PCA of differentially expressed genes") +
+         theme(plot.title = element_text(hjust = 0.5))
+
+# Plot heatmap of 10 most overexpressed and most downregulated genes
+dea_results_filtered = dea_results_filtered[order(dea_results_filtered$log2FoldChange), ]
+selected_genes = rownames(rbind(head(dea_results_filtered, 10), tail(dea_results_filtered, 10)))
+anno = as.data.frame(colData(deseq_dataset)[, "condition"])
+colnames(anno) = "Condition"
+rownames(anno) = rownames(colData(deseq_dataset))
+
+pheatmap(
+  assay(vst_dataset[selected_genes, ]),
+  annotation_col = anno,
+  angle_col = 45,
+  cutree_rows = 2,
+  cutree_cols = 2,
+  scale = "row",
+  labels_row = dea_results_filtered[selected_genes, ]$symbol
+)
+```
+
+
+
+```{r}
+# Draw volcano plot
+EnhancedVolcano(
+  dea_results,
+  lab = dea_results$symbol,
+  x = 'log2FoldChange',
+  y = 'padj',
+  FCcutoff = 1,
+  pCutoff = 0.1,
+  legendPosition = "right",
+  selectLab = dea_results$symbol[startsWith(dea_results$symbol, "CYP")],
+  drawConnectors = TRUE,
+  colAlpha = 1
+  )
+```
+
+
+
+```{r}
+# Create session info
+sessionInfo()
+```
+
+
