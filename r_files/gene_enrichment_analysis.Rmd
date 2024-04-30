@@ -1,0 +1,129 @@
+---
+title: "Functional enrichment analysis"
+output: html_notebook
+---
+
+# Import libraries and data
+
+```{r}
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ggplot2)
+library(msigdbr)
+library(enrichplot)
+```
+
+
+```{r}
+# Import results from diff expr analysis and filtered results
+dea_results = read.csv("../results/differential_expression/dea_results.csv")
+dea_results_filtered = read.csv("../results/differential_expression/dea_results_filtered.csv")
+
+# Remove remaining rows with unknown entrez id
+dea_results_filtered = dea_results_filtered[!is.na(dea_results_filtered$entrez), ]
+dea_results = dea_results[!is.na(dea_results$entrez), ]
+
+# Cast entrez IDs into strings
+dea_results_filtered$entrez = as.character(dea_results_filtered$entrez)
+dea_results$entrez = as.character(dea_results$entrez)
+```
+
+# Overrepresentation analysis
+
+
+```{r}
+# Perform GO term ORA of DEA filtered genes against all detected genes
+go_ora = enrichGO(
+  gene = dea_results_filtered$entrez,
+  universe = dea_results$entrez,
+  OrgDb = org.Hs.eg.db,
+  ont = "BP",
+  readable = TRUE,
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.01
+)
+
+# Plot GO term results
+barplot(go_ora, showCategory = 10)
+```
+
+
+
+
+```{r}
+# Perform KEGG term enrichment of DEA filtered genes against all detected genes
+kegg_ora = enrichKEGG(
+  gene = dea_results_filtered$entrez,
+  universe = dea_results$entrez,
+  organism = "hsa",
+  pvalueCutoff = 0.01,
+  qvalueCutoff = 0.05
+)
+
+# Plot KEGG term results
+barplot(kegg_ora, showCategory = 10)
+```
+
+
+# Gene set enrichment analysis
+
+```{r}
+# Prepare gene list
+gene_list = dea_results$stat
+names(gene_list) = dea_results$entrez
+gene_list = sort(gene_list, decreasing = TRUE)
+
+# Check
+head(gene_list)
+```
+
+```{r}
+# Perform GSEA using GO
+go_gsea = gseGO(
+  geneList = gene_list,
+  OrgDb = org.Hs.eg.db,
+  ont = "BP",
+  keyType = "ENTREZID",
+  pvalueCutoff = 0.05)
+
+# Plot
+dotplot(go_gsea, showCategory=10)
+```
+
+
+```{r}
+# Perform GSEA using KEGG
+kegg_gsea = gseKEGG(
+  geneList = gene_list,
+  organism = "hsa",
+  keyType = "ncbi-geneid",
+  pvalueCutoff = 0.05)
+
+# Plot
+dotplot(kegg_gsea, showCategory = 10)
+```
+# Comparison with ChIP-seq data
+
+
+
+```{r}
+# Check intersection of peaks from ChIP-seq and RNA-seq
+chip_data = read.csv(
+  file = "../../cyp3a4_chip_seq/r_files/peak_annotation.txt",
+  sep = "\t"
+)
+
+overlaps = intersect(dea_results_filtered$entrez, chip_data$geneId)
+
+inter_data = dea_results_filtered[dea_results_filtered$entrez %in% overlaps, ]
+
+# Save
+write.csv(inter_data, "../results/differential_expression/chip_rna_intersection.csv")
+```
+
+
+
+```{r}
+sessionInfo()
+```
+
