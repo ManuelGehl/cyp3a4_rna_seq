@@ -49,7 +49,7 @@ Quality checks such as MA plots and exploratory data analysis (EDA) plots indica
 The dataset was then filtered to remove entries with NA in the adjusted p-values, adjusted p-values greater than 0.1, or absolute log2 fold changes less than 1. This resulted in a list of 133 differentially expressed genes that closely matched the 157 genes identified by the authors of the original study. Interestingly, 11 of the 133 differentially expressed genes were from the CYP450 family, the same number as identified in the original study, of which CYP3A4, CYP3A43, CYP2C8, CYP2B6 and CYP3A5 were also found overexpressed in their qPCR results.
 
 <br></br>
-![Figure 3](figures/volcano_plot.png)
+<img src=figures/volcano_plot.png width=400)>
 
 **Figure 3: Volcano plot of detected genes.**
 <br></br>
