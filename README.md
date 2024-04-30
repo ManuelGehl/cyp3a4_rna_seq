@@ -28,7 +28,7 @@ During the exploratory data analysis, the quantified gene expression data was fi
 Principal component analysis (PCA) of the 500 most variant genes revealed that the samples clustered based on treatment, indicating that rifampin and DMSO treatments affected gene expression in distinct ways (**Fig. 1**). However, there was also considerable variance within the clusters, particularly between the rifampin samples and even more so between the DMSO samples. This variance between samples suggests that while treatment has a significant impact on gene expression, other factors may also be contributing to the observed patterns. Despite this variance, the PCA results indicate that rifampin treatment induced notable changes in gene expression, suggesting it has a strong impact on the transcriptome.
 
 <br></br>
-<img src="figures/pca_500_genes.png" alt="Fig 1" width="400">
+<img src="figures/pca_500_genes.png" alt="Fig 1" width="500">
 
 **Figure 1: PCA of 500 most variant genes.**
 <br></br>
@@ -41,7 +41,7 @@ For differential expression analysis, DESeq2 was used to identify genes with sig
 Quality checks such as MA plots and exploratory data analysis (EDA) plots indicated that the data were well distributed, although a large proportion of genes still had low counts (**Fig. 2**). The distribution of p-values reflected this, suggesting that many genes were expressed at low levels.
 
 <br></br>
-<img src="figures/diagnostic_plots.png" alt="Fig 2" width="400">
+<img src="figures/diagnostic_plots.png" alt="Fig 2" width="500">
 
 **Figure 2: MA plot (top-left), distribution of p-values (top-right) and EDA plots with raw counts (bottom-left) and normalized counts (bottom-right).**
 <br></br>
@@ -49,9 +49,17 @@ Quality checks such as MA plots and exploratory data analysis (EDA) plots indica
 The dataset was then filtered to remove entries with NA in the adjusted p-values, adjusted p-values greater than 0.1, or absolute log2 fold changes less than 1. This resulted in a list of 133 differentially expressed genes that closely matched the 157 genes identified by the authors of the original study. Interestingly, 11 of the 133 differentially expressed genes were from the CYP450 family, the same number as identified in the original study, of which CYP3A4, CYP3A43, CYP2C8, CYP2B6 and CYP3A5 were also found overexpressed in their qPCR results.
 
 <br></br>
-<img src=figures/volcano_plot.png width=400)>
+<img src=figures/volcano_plot.png width=500)>
 
 **Figure 3: Volcano plot of detected genes.**
 <br></br>
 
 Using these 133 differentially expressed genes, a Principal Component Analysis (PCA) plot was constructed using variance-stabilized transformed (VST) counts. This plot showed that the treated samples clustered together, and the explainable variance between groups decreased significantly from an initial 24% to approximately 4%. This indicated a strong effect of treatment, with much of the remaining variance explained by differences in gene expression induced by rifampin or DMSO treatment.
+
+In the analysis of gene expression changes due to rifampin treatment, several patterns emerged among the most significantly upregulated and downregulated genes (**Fig. 4**). Among the upregulated genes, UDP-glucuronosyltransferase (UGT) UGT2A2 stood out. This enzyme is crucial for phase II biotransformation reactions, where lipophilic substrates are conjugated with glucuronic acid, increasing the water solubility of metabolites, facilitating their excretion through urine or bile. CYP3A4, another highly upregulated gene, is instrumental in metabolizing a wide range of drugs and xenobiotics. Conversely, among the most significantly downregulated genes, there was a notable presence of transcription factors from the zinc finger protein class, including GLI1 and ZNF43. Additionally, the analysis revealed a considerable presence of non-coding RNAs on both sides of the regulation spectrum. This obersation fits to the known role of microRNAs (miRNAs) in regulating genes involved in drug metabolism and the known effect of rifampin on the expression of hepatic miRNAs (Ramamoorthy et al., 2013).
+
+<br></br>
+<img src=figures/heatmap.png width=500)>
+
+**Figure 4: Heatmap of the 10 most upregulated and 10 most downregulated genes.**
+<br></br>
